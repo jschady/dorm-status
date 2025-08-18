@@ -90,9 +90,6 @@ export default async function Home() {
             <p>
               Built with Next.js 15, Clerk Auth, and Supabase
             </p>
-            <p className="mt-2">
-              🚧 Epic 1: Authentication Foundation - Complete
-            </p>
           </div>
         </div>
       </div>
