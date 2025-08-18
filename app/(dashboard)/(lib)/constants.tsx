@@ -105,31 +105,3 @@ export const WifiOffIcon = () => (
   </svg>
 );
 
-// --- STATUS OPTIONS CONFIGURATION ---
-export const STATUS_OPTIONS: Record<StatusKey, StatusOption> = {
-  'IN_ROOM': { 
-    text: 'In the Room', 
-    icon: HomeIcon, 
-    color: 'text-green-400' 
-  },
-  'STUDYING': { 
-    text: 'Studying / Class', 
-    icon: BookOpenIcon, 
-    color: 'text-blue-400' 
-  },
-  'AT_GYM': { 
-    text: 'At the Gym', 
-    icon: DumbbellIcon, 
-    color: 'text-orange-400' 
-  },
-  'SLEEPING': { 
-    text: 'Sleeping', 
-    icon: MoonIcon, 
-    color: 'text-purple-400' 
-  },
-  'AWAY': { 
-    text: 'Out & About', 
-    icon: ArrowRightIcon, 
-    color: 'text-gray-400' 
-  }
-}; 
