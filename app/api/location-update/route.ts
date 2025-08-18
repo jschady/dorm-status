@@ -1,484 +1,317 @@
 /**
  * Next.js 15 App Router API Route for GPS Location Processing
  * Receives location data from Overland GPS iOS app and processes geofencing logic
+ * Updated for multi-user schema with Clerk authentication
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { 
-  OverlandRequest, 
-  LocationProcessingResponse, 
-  ErrorResponse,
-  ValidationResult 
-} from '../lib/location-types';
+import { createClient } from '@supabase/supabase-js';
 
-import { 
-  determineStatusChange, 
-  validateCoordinates,
-  type Coordinates,
-  type GeofenceResult
-} from '../lib/geofence';
+// Types for location processing
+interface LocationUpdateRequest {
+  device_id: string;
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+  accuracy?: number;
+}
 
-import {
-  lookupDeviceMapping,
-  getGeofenceConfig,
-  getCurrentMemberStatus,
-  updateMemberStatus,
-  updateDeviceLastSeen,
-  type LocationProcessingResult
-} from '../lib/database';
+interface LocationUpdateResponse {
+  success: boolean;
+  status_updated?: boolean;
+  current_status?: 'IN_ROOM' | 'AWAY';
+  geofence_id?: string;
+  message?: string;
+  error?: string;
+}
 
-// Environment variables (for future database integration)
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+interface DeviceMapping {
+  id: string;
+  device_id: string;
+  id_user: string;
+  enabled: boolean;
+  created_at: string;
+  last_location_update?: string;
+}
 
-/**
- * Generate a unique request ID for logging and tracing
- */
-function generateRequestId(): string {
-  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+interface Geofence {
+  id_geofence: string;
+  id_user: string;
+  name: string;
+  center_latitude: number;
+  center_longitude: number;
+  radius_meters: number;
+  hysteresis_meters: number;
+}
+
+interface GeofenceMember {
+  id_geofence: string;
+  id_user: string;
+  role: 'owner' | 'member';
+  status: 'IN_ROOM' | 'AWAY';
+  last_updated: string;
+  last_gps_update?: string;
 }
 
 /**
- * Structured logging function
+ * Create Supabase client with service role for API operations
  */
-function logMessage(
-  level: 'info' | 'warn' | 'error',
-  message: string,
-  data?: any,
-  requestId?: string
-) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    request_id: requestId,
-    ...(data && { data })
+function createServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
+}
+
+/**
+ * Calculate distance between two GPS coordinates using Haversine formula
+ */
+function calculateDistance(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number
+): number {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+           Math.cos(φ1) * Math.cos(φ2) *
+           Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  
+  return R * c;
+}
+
+/**
+ * Determine if status should change based on location and hysteresis logic
+ */
+function calculateGeofenceStatus(
+  location: { latitude: number; longitude: number },
+  geofence: Geofence,
+  currentStatus: 'IN_ROOM' | 'AWAY'
+): 'IN_ROOM' | 'AWAY' {
+  const distance = calculateDistance(
+    location.latitude,
+    location.longitude,
+    geofence.center_latitude,
+    geofence.center_longitude
+  );
+  
+  const radius = geofence.radius_meters;
+  const hysteresis = geofence.hysteresis_meters;
+  
+  // Apply hysteresis to prevent status flapping
+  if (currentStatus === 'AWAY') {
+    // Need to be well inside to change to IN_ROOM
+    return distance <= (radius - hysteresis) ? 'IN_ROOM' : 'AWAY';
+  } else {
+    // Need to be well outside to change to AWAY  
+    return distance >= (radius + hysteresis) ? 'AWAY' : 'IN_ROOM';
+  }
+}
+
+/**
+ * Validate incoming location update request
+ */
+function validateLocationRequest(body: any): LocationUpdateRequest | null {
+  if (!body) return null;
+  
+  const { device_id, latitude, longitude, timestamp, accuracy } = body;
+  
+  // Check required fields
+  if (!device_id || typeof device_id !== 'string') return null;
+  if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) return null;
+  if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) return null;
+  if (!timestamp || typeof timestamp !== 'string') return null;
+  
+  // Validate timestamp
+  if (isNaN(Date.parse(timestamp))) return null;
+  
+  return {
+    device_id,
+    latitude,
+    longitude,
+    timestamp,
+    accuracy: typeof accuracy === 'number' ? accuracy : undefined
   };
-  
-  console.log(JSON.stringify(logEntry));
-}
-
-/**
- * Validate incoming Overland GPS request structure
- */
-function validateOverlandRequest(body: any): ValidationResult {
-  try {
-    // Check if body exists
-    if (!body) {
-      return {
-        isValid: false,
-        error: 'Missing request body',
-        details: 'Request body is required'
-      };
-    }
-
-    // Check for locations array
-    if (!Array.isArray(body.locations)) {
-      return {
-        isValid: false,
-        error: 'Invalid locations format',
-        details: 'locations must be an array'
-      };
-    }
-
-    // Validate each location in the array
-    for (let i = 0; i < body.locations.length; i++) {
-      const location = body.locations[i];
-      
-      // Check required structure
-      if (location.type !== 'Feature') {
-        return {
-          isValid: false,
-          error: `Invalid location type at index ${i}`,
-          details: 'location.type must be "Feature"'
-        };
-      }
-
-      if (!location.geometry || location.geometry.type !== 'Point') {
-        return {
-          isValid: false,
-          error: `Invalid geometry at index ${i}`,
-          details: 'geometry.type must be "Point"'
-        };
-      }
-
-      if (!Array.isArray(location.geometry.coordinates) || 
-          location.geometry.coordinates.length !== 2) {
-        return {
-          isValid: false,
-          error: `Invalid coordinates at index ${i}`,
-          details: 'coordinates must be [longitude, latitude] array'
-        };
-      }
-
-      // Validate coordinates are numbers
-      const [lon, lat] = location.geometry.coordinates;
-      if (typeof lon !== 'number' || typeof lat !== 'number') {
-        return {
-          isValid: false,
-          error: `Invalid coordinate values at index ${i}`,
-          details: 'longitude and latitude must be numbers'
-        };
-      }
-
-      // Validate coordinate ranges
-      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-        return {
-          isValid: false,
-          error: `Coordinates out of range at index ${i}`,
-          details: 'longitude: -180 to 180, latitude: -90 to 90'
-        };
-      }
-
-      // Check required properties
-      if (!location.properties) {
-        return {
-          isValid: false,
-          error: `Missing properties at index ${i}`,
-          details: 'location.properties is required'
-        };
-      }
-
-      const props = location.properties;
-      
-      // Check required fields
-      if (!props.device_id || typeof props.device_id !== 'string') {
-        return {
-          isValid: false,
-          error: `Invalid device_id at index ${i}`,
-          details: 'device_id must be a non-empty string'
-        };
-      }
-
-      if (!props.timestamp || typeof props.timestamp !== 'string') {
-        return {
-          isValid: false,
-          error: `Invalid timestamp at index ${i}`,
-          details: 'timestamp must be a valid ISO 8601 string'
-        };
-      }
-
-      // Validate timestamp format (basic ISO 8601 check)
-      if (isNaN(Date.parse(props.timestamp))) {
-        return {
-          isValid: false,
-          error: `Invalid timestamp format at index ${i}`,
-          details: 'timestamp must be a valid ISO 8601 date string'
-        };
-      }
-    }
-
-    return { isValid: true };
-  } catch (error) {
-    return {
-      isValid: false,
-      error: 'Validation error',
-      details: error instanceof Error ? error.message : 'Unknown validation error'
-    };
-  }
-}
-
-/**
- * Extract unique device IDs from the request
- */
-function extractDeviceIds(request: OverlandRequest): string[] {
-  const deviceIds = new Set<string>();
-  
-  // Add device_id from root level if present
-  if (request.device_id) {
-    deviceIds.add(request.device_id);
-  }
-  
-  // Add device_ids from each location
-  request.locations.forEach(location => {
-    if (location.properties.device_id) {
-      deviceIds.add(location.properties.device_id);
-    }
-  });
-  
-  return Array.from(deviceIds);
-}
-
-/**
- * Process location update for a single device with geofencing logic
- */
-async function processDeviceLocation(
-  deviceId: string, 
-  location: { latitude: number; longitude: number; timestamp: string },
-  requestId: string
-): Promise<LocationProcessingResult> {
-  const result: LocationProcessingResult = {
-    device_id: deviceId,
-    user_found: false,
-    geofence_applied: false,
-    status_changed: false
-  };
-
-  try {
-    // Step 1: Look up device mapping
-    logMessage('info', `Looking up device mapping for ${deviceId}`, {}, requestId);
-    const deviceLookup = await lookupDeviceMapping(deviceId);
-    
-    if (!deviceLookup.success) {
-      result.error = deviceLookup.error;
-      return result;
-    }
-
-    if (!deviceLookup.data) {
-      logMessage('warn', `No device mapping found for device ${deviceId}`, {}, requestId);
-      result.error = 'Device mapping not found';
-      return result;
-    }
-
-    result.user_found = true;
-    result.user_id = deviceLookup.data.id_member;
-
-    // Step 2: Get geofence configuration
-    const geofenceConfig = await getGeofenceConfig(deviceLookup.data.dorm_name);
-    
-    if (!geofenceConfig.success) {
-      result.error = geofenceConfig.error;
-      return result;
-    }
-
-    if (!geofenceConfig.data) {
-      logMessage('warn', `No geofence configuration found`, { dorm: deviceLookup.data.dorm_name }, requestId);
-      result.error = 'Geofence configuration not found';
-      return result;
-    }
-
-    // Step 3: Get current member status for hysteresis logic
-    const memberStatus = await getCurrentMemberStatus(result.user_id);
-    
-    if (!memberStatus.success) {
-      result.error = memberStatus.error;
-      return result;
-    }
-
-    if (!memberStatus.data) {
-      logMessage('warn', `Member not found: ${result.user_id}`, {}, requestId);
-      result.error = 'Member not found';
-      return result;
-    }
-
-    result.old_status = memberStatus.data.status;
-
-    // Step 4: Apply geofencing logic
-    const coordinates: Coordinates = {
-      latitude: location.latitude,
-      longitude: location.longitude
-    };
-
-    const geofenceResult: GeofenceResult = determineStatusChange(
-      coordinates,
-      geofenceConfig.data,
-      memberStatus.data.status as 'IN_ROOM' | 'AWAY'
-    );
-
-    result.geofence_applied = true;
-    result.distance_meters = geofenceResult.distance_meters;
-    result.calculation_time_ms = geofenceResult.calculation_time_ms;
-
-    logMessage('info', `Geofence calculation completed`, {
-      device_id: deviceId,
-      user_id: result.user_id,
-      distance: Math.round(geofenceResult.distance_meters),
-      inside_boundary: geofenceResult.inside_boundary,
-      should_change: geofenceResult.status_should_change,
-      hysteresis_applied: geofenceResult.hysteresis_applied
-    }, requestId);
-
-    // Step 5: Update status if needed
-    if (geofenceResult.status_should_change && geofenceResult.new_status) {
-      const updateResult = await updateMemberStatus(
-        result.user_id,
-        geofenceResult.new_status,
-        location.timestamp
-      );
-
-      if (!updateResult.success) {
-        result.error = updateResult.error;
-        return result;
-      }
-
-      result.status_changed = true;
-      result.new_status = geofenceResult.new_status;
-
-      logMessage('info', `Status updated successfully`, {
-        device_id: deviceId,
-        user_id: result.user_id,
-        old_status: result.old_status,
-        new_status: result.new_status,
-        distance: Math.round(geofenceResult.distance_meters)
-      }, requestId);
-    } else {
-      logMessage('info', `No status change needed`, {
-        device_id: deviceId,
-        user_id: result.user_id,
-        current_status: result.old_status,
-        distance: Math.round(geofenceResult.distance_meters),
-        hysteresis_applied: geofenceResult.hysteresis_applied
-      }, requestId);
-    }
-
-    // Step 6: Update device last seen timestamp
-    await updateDeviceLastSeen(deviceId);
-
-    return result;
-  } catch (error) {
-    result.error = `Processing error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    logMessage('error', `Device processing failed`, {
-      device_id: deviceId,
-      error: result.error
-    }, requestId);
-    return result;
-  }
 }
 
 /**
  * POST handler for location updates
  */
 export async function POST(request: NextRequest) {
-  const requestId = generateRequestId();
-  const startTime = Date.now();
+  console.log('Location update request received');
   
-  logMessage('info', 'Location update request received', {
-    method: 'POST',
-    headers: {
-      'content-type': request.headers.get('content-type'),
-      'user-agent': request.headers.get('user-agent')
-    }
-  }, requestId);
-
   try {
-    // Check content-type header
-    if (!request.headers.get('content-type')?.includes('application/json')) {
-      logMessage('warn', 'Invalid content-type', { 
-        contentType: request.headers.get('content-type')
-      }, requestId);
-      
-      return NextResponse.json({
-        result: 'error',
-        error: 'Invalid content-type',
-        details: 'Content-Type must be application/json',
-        timestamp: new Date().toISOString()
-      } as ErrorResponse, { status: 400 });
-    }
-
     // Parse request body
     let body;
     try {
       body = await request.json();
     } catch (error) {
-      logMessage('warn', 'Invalid JSON in request body', {
-        error: error instanceof Error ? error.message : 'Unknown JSON parse error'
-      }, requestId);
-      
+      console.error('Invalid JSON in request body:', error);
       return NextResponse.json({
-        result: 'error',
-        error: 'Invalid JSON',
-        details: 'Request body must be valid JSON',
-        timestamp: new Date().toISOString()
-      } as ErrorResponse, { status: 400 });
+        success: false,
+        error: 'Invalid JSON in request body'
+      } as LocationUpdateResponse, { status: 400 });
     }
 
-    // Validate request body structure
-    const validation = validateOverlandRequest(body);
-    if (!validation.isValid) {
-      logMessage('warn', 'Request validation failed', {
-        error: validation.error,
-        details: validation.details
-      }, requestId);
-      
-      return NextResponse.json({
-        result: 'error',
-        error: validation.error || 'Validation failed',
-        details: validation.details,
-        timestamp: new Date().toISOString()
-      } as ErrorResponse, { status: 400 });
-    }
-
-    // Cast to proper type after validation
-    const overlandRequest = body as OverlandRequest;
-    
-    // Extract processing information
-    const locationCount = overlandRequest.locations.length;
-    const deviceIds = extractDeviceIds(overlandRequest);
-    
-    logMessage('info', 'Processing location data with geofencing', {
-      location_count: locationCount,
-      device_ids: deviceIds,
-      unique_devices: deviceIds.length
-    }, requestId);
-
-    // Process each location with geofencing logic
-    const processingResults: LocationProcessingResult[] = [];
-    let statusUpdatesCount = 0;
-
-    for (const location of overlandRequest.locations) {
-      const [longitude, latitude] = location.geometry.coordinates;
-      const deviceId = location.properties.device_id;
-
-      // Log location details
-      logMessage('info', `Processing location for device ${deviceId}`, {
-        coordinates: { latitude, longitude },
+    // Handle Overland GPS format (locations array) or simple format
+    let locationData;
+    if (body.locations && Array.isArray(body.locations) && body.locations.length > 0) {
+      // Overland GPS format - use the first location
+      const location = body.locations[0];
+      locationData = {
+        device_id: location.properties.device_id,
+        latitude: location.geometry.coordinates[1],
+        longitude: location.geometry.coordinates[0], 
         timestamp: location.properties.timestamp,
-        accuracy: location.properties.horizontal_accuracy,
-        motion: location.properties.motion,
-        battery_level: location.properties.battery_level
-      }, requestId);
+        accuracy: location.properties.horizontal_accuracy
+      };
+    } else {
+      // Simple format
+      locationData = body;
+    }
 
-      // Process this location with geofencing
-      const result = await processDeviceLocation(
-        deviceId,
-        { latitude, longitude, timestamp: location.properties.timestamp },
-        requestId
+    // Validate request
+    const validatedRequest = validateLocationRequest(locationData);
+    if (!validatedRequest) {
+      console.error('Invalid location request format');
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid request format'
+      } as LocationUpdateResponse, { status: 400 });
+    }
+
+    const supabase = createServiceClient();
+
+    // Step 1: Look up device mapping
+    const { data: deviceMapping, error: deviceError } = await supabase
+      .from('device_mappings')
+      .select('*')
+      .eq('device_id', validatedRequest.device_id)
+      .eq('enabled', true)
+      .single();
+
+    if (deviceError || !deviceMapping) {
+      console.error('Device mapping not found:', validatedRequest.device_id);
+      return NextResponse.json({
+        success: false,
+        error: 'Device not registered'
+      } as LocationUpdateResponse, { status: 404 });
+    }
+
+    console.log(`Processing location for user: ${deviceMapping.id_user}`);
+
+    // Step 2: Get all geofences user is a member of
+    const { data: userGeofences, error: geofenceError } = await supabase
+      .from('geofence_members')
+      .select(`
+        *,
+        geofences!inner(*)
+      `)
+      .eq('id_user', deviceMapping.id_user);
+
+    if (geofenceError) {
+      console.error('Error fetching user geofences:', geofenceError);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch geofences'
+      } as LocationUpdateResponse, { status: 500 });
+    }
+
+    if (!userGeofences || userGeofences.length === 0) {
+      console.log('User is not a member of any geofences');
+      // Update device last seen timestamp
+      await supabase
+        .from('device_mappings')
+        .update({ last_location_update: new Date().toISOString() })
+        .eq('device_id', validatedRequest.device_id);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Location processed - no geofences'
+      } as LocationUpdateResponse);
+    }
+
+    // Step 3: Process each geofence the user is a member of
+    let statusUpdated = false;
+    let updatedGeofenceId: string | undefined;
+
+    for (const memberData of userGeofences) {
+      const member = memberData as GeofenceMember & { geofences: Geofence };
+      const geofence = member.geofences;
+      
+      console.log(`Checking geofence: ${geofence.name} (${geofence.id_geofence})`);
+      
+      // Calculate new status based on location and hysteresis
+      const newStatus = calculateGeofenceStatus(
+        { latitude: validatedRequest.latitude, longitude: validatedRequest.longitude },
+        geofence,
+        member.status
       );
 
-      processingResults.push(result);
-      
-      if (result.status_changed) {
-        statusUpdatesCount++;
+      // Update status if it changed
+      if (newStatus !== member.status) {
+        console.log(`Status change for ${geofence.name}: ${member.status} -> ${newStatus}`);
+        
+        const { error: updateError } = await supabase
+          .from('geofence_members')
+          .update({
+            status: newStatus,
+            last_updated: new Date().toISOString(),
+            last_gps_update: validatedRequest.timestamp
+          })
+          .eq('id_geofence', geofence.id_geofence)
+          .eq('id_user', deviceMapping.id_user);
+
+        if (updateError) {
+          console.error('Error updating member status:', updateError);
+        } else {
+          statusUpdated = true;
+          updatedGeofenceId = geofence.id_geofence;
+        }
+      } else {
+        console.log(`No status change needed for ${geofence.name}: ${member.status}`);
       }
     }
 
-    const finalProcessingTime = Date.now() - startTime;
-    
-    // Count successful vs failed processing
-    const successfulResults = processingResults.filter(r => !r.error);
-    const failedResults = processingResults.filter(r => r.error);
+    // Step 4: Update device last seen timestamp
+    await supabase
+      .from('device_mappings')
+      .update({ last_location_update: new Date().toISOString() })
+      .eq('device_id', validatedRequest.device_id);
 
-    logMessage('info', 'Location processing completed', {
-      processed_count: locationCount,
-      successful_count: successfulResults.length,
-      failed_count: failedResults.length,
-      status_updates_made: statusUpdatesCount,
-      total_processing_time_ms: finalProcessingTime
-    }, requestId);
+    console.log(`Location processing complete. Status updated: ${statusUpdated}`);
 
-    // Return enhanced response with processing results
     return NextResponse.json({
-      result: 'ok',
-      message: `Processed ${locationCount} locations, made ${statusUpdatesCount} status updates`,
-      processed_count: locationCount,
-      status_updates_made: statusUpdatesCount,
-      processing_results: processingResults
+      result: 'ok'
     });
 
   } catch (error) {
-    const processingTime = Date.now() - startTime;
-    
-    logMessage('error', 'Unexpected error processing location data', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      processing_time_ms: processingTime
-    }, requestId);
-
+    console.error('Unexpected error processing location:', error);
     return NextResponse.json({
-      result: 'error',
-      error: 'Internal server error',
-      details: 'An unexpected error occurred while processing the request',
-      timestamp: new Date().toISOString()
-    } as ErrorResponse, { status: 500 });
+      success: false,
+      error: 'Internal server error'
+    } as LocationUpdateResponse, { status: 500 });
   }
+}
+
+/**
+ * GET handler for testing
+ */
+export async function GET() {
+  return NextResponse.json({
+    status: 'ok',
+    message: 'Location update endpoint is running',
+    timestamp: new Date().toISOString()
+  });
 } 

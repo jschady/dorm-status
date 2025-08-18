@@ -2,28 +2,43 @@
 
 import React from 'react';
 import { usePWA } from '../(lib)/hooks/use-pwa';
+// import { usePWAAuth } from '../(lib)/hooks/use-pwa-auth';
+// import { EnhancedAuthProvider } from '../(lib)/auth/enhanced-auth-provider';
+// import AuthErrorBoundary from './auth/auth-error-boundary-simple';
 
 interface ProvidersProps {
     children: React.ReactNode;
 }
 
-export default function Providers({ children }: ProvidersProps) {
-    // Use the custom PWA hook for all PWA functionality
+// Internal component to handle PWA functionality
+function PWAManager({ children }: { children: React.ReactNode }) {
     const pwa = usePWA();
+    // const pwaAuth = usePWAAuth();
 
-    // Optional: Add any additional provider logic here
     // The PWA hook handles:
     // - Service Worker registration
     // - Install prompt management
     // - Online/offline detection
     // - App installation state
 
-    // You can expose PWA state/actions to children via Context if needed
-    // For now, the hook runs automatically to handle PWA functionality
+    // The PWA Auth hook handles (temporarily disabled):
+    // - Service Worker authentication state sync
+    // - Token management in Service Worker
+    // - Offline authentication handling
+    // - Background sync for auth refresh
 
+    return <>{children}</>;
+}
+
+export default function Providers({ children }: ProvidersProps) {
     return (
-        <>
-            {children}
-        </>
+        // Temporarily disable enhanced auth to fix login issues
+        // <AuthErrorBoundary>
+        //     <EnhancedAuthProvider>
+                <PWAManager>
+                    {children}
+                </PWAManager>
+        //     </EnhancedAuthProvider>
+        // </AuthErrorBoundary>
     );
 } 
