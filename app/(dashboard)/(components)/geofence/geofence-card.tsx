@@ -5,46 +5,12 @@ import { GeofenceCardProps } from '../../(lib)/types';
 import { 
   MapPinIcon, 
   UserGroupIcon, 
-  EllipsisVerticalIcon,
-  StarIcon,
-  ShareIcon,
-  PencilSquareIcon,
-  TrashIcon 
+  StarIcon
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
 
-export function GeofenceCard({ geofence, onEdit, onDelete, onViewDetails, onShare }: GeofenceCardProps) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showInviteCode, setShowInviteCode] = useState(false);
-
+export function GeofenceCard({ geofence, onViewDetails }: GeofenceCardProps) {
   const isOwner = geofence.role === 'owner';
   const createdDate = new Date(geofence.created_at).toLocaleDateString();
-
-  const copyInviteCode = async () => {
-    try {
-      await navigator.clipboard.writeText(geofence.invite_code);
-      // You could add a toast notification here
-    } catch (error) {
-      console.error('Failed to copy invite code:', error);
-    }
-  };
-
-  const copyInviteLink = async () => {
-    const inviteUrl = `${window.location.origin}/join?invite=${geofence.invite_code}`;
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      // You could add a toast notification here
-    } catch (error) {
-      console.error('Failed to copy invite link:', error);
-    }
-  };
-
-  const handleShare = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onShare) {
-      onShare(geofence);
-    }
-  };
 
   return (
     <div 
@@ -71,30 +37,22 @@ export function GeofenceCard({ geofence, onEdit, onDelete, onViewDetails, onShar
               <h3 className="text-lg font-medium text-gray-900 truncate">
                 {geofence.name}
               </h3>
-              <div className="flex items-center text-sm text-gray-500 space-x-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  isOwner 
-                    ? 'bg-indigo-100 text-indigo-800' 
-                    : 'bg-green-100 text-green-800'
-                }`}>
-                  {isOwner ? 'Owner' : 'Member'}
-                </span>
+              <div className="flex items-center text-sm text-gray-500">
                 <span>Created {createdDate}</span>
               </div>
             </div>
           </div>
 
-          {/* Share Button for Owners */}
-          { isOwner && onShare && (
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
-              title="Share invitation"
-            >
-              <ShareIcon className="h-4 w-4" />
-              Share
-            </button>
-          )}
+          {/* Role indicator - no actions on card */}
+          <div className="flex items-center">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+              isOwner 
+                ? 'bg-indigo-100 text-indigo-800' 
+                : 'bg-green-100 text-green-800'
+            }`}>
+              {isOwner ? 'Owner' : 'Member'}
+            </span>
+          </div>
         </div>
 
         {/* Card Stats */}

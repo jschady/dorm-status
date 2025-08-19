@@ -212,10 +212,7 @@ export interface IOSInstallModalProps {
 // New geofence component props
 export interface GeofenceCardProps {
   geofence: GeofenceListItem;
-  onEdit?: (geofence: GeofenceListItem) => void;
-  onDelete?: (geofenceId: string) => void;
   onViewDetails?: (geofenceId: string) => void;
-  onShare?: (geofence: GeofenceListItem) => void;
 }
 
 export interface GeofenceListProps {
@@ -223,7 +220,6 @@ export interface GeofenceListProps {
   isLoading?: boolean;
   onCreateNew?: () => void;
   onRefresh?: () => void;
-  onShare?: (geofence: GeofenceListItem) => void;
 }
 
 export interface CreateGeofenceFormProps {

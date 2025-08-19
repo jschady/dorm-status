@@ -8,12 +8,14 @@ import {
   ArrowLeftIcon, 
   ShareIcon,
   Cog6ToothIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { MemberList } from '../../(dashboard)/(components)/members/member-list';
 import { InviteShareModal } from '../../(dashboard)/(components)/modals/invite-share-modal';
 import { GeofenceSettingsModal } from '../../(dashboard)/(components)/modals/geofence-settings-modal';
+import { DeleteGeofenceModal } from '../../(dashboard)/(components)/modals/delete-geofence-modal';
 import { useGeofenceDetails } from '../../(dashboard)/(lib)/hooks/use-geofence-details';
 import { useMembers } from '../../(dashboard)/(lib)/hooks/use-members';
 
@@ -28,6 +30,7 @@ export default function GeofenceDetailPage() {
   
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   const isOwner = geofence?.role === 'owner';
   
@@ -61,6 +64,25 @@ export default function GeofenceDetailPage() {
       </div>
     );
   }
+
+  const handleDeleteGeofence = async (geofenceId: string) => {
+    try {
+      const response = await fetch(`/api/geofences/${geofenceId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete geofence');
+      }
+
+      // Redirect to dashboard after successful deletion
+      router.push('/dashboard');
+    } catch (error) {
+      console.error('Failed to delete geofence:', error);
+      throw error; // Re-throw so modal can handle it
+    }
+  };
 
   const formatDate = (timestamp: string) => {
     return new Date(timestamp).toLocaleDateString('en-US', {
@@ -108,6 +130,16 @@ export default function GeofenceDetailPage() {
               >
                 <Cog6ToothIcon className="h-4 w-4" />
                 Settings
+              </button>
+            )}
+            
+            {isOwner && (
+              <button 
+                onClick={() => setShowDeleteModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                <TrashIcon className="h-4 w-4" />
+                Delete
               </button>
             )}
           </div>
@@ -215,6 +247,19 @@ export default function GeofenceDetailPage() {
               // Refresh the geofence data
               // The hook should automatically refresh when the component re-renders
               console.log('Geofence updated:', updatedGeofence);
+            }}
+          />
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {isOwner && (
+          <DeleteGeofenceModal
+            isOpen={showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            onConfirm={handleDeleteGeofence}
+            geofence={{
+              id_geofence: geofence.id_geofence,
+              name: geofence.name
             }}
           />
         )}

@@ -10,8 +10,7 @@ export function GeofenceList({
   geofences, 
   isLoading = false, 
   onCreateNew, 
-  onRefresh,
-  onShare 
+  onRefresh
 }: GeofenceListProps) {
   const router = useRouter();
   
@@ -132,18 +131,9 @@ export function GeofenceList({
             <GeofenceCard
               key={geofence.id_geofence}
               geofence={geofence}
-              onEdit={(geofence) => {
-                console.log('Edit geofence:', geofence);
-                // TODO: Implement edit modal
-              }}
-              onDelete={(geofenceId) => {
-                console.log('Delete geofence:', geofenceId);
-                // TODO: Implement delete functionality
-              }}
               onViewDetails={(geofenceId) => {
                 router.push(`/dashboard/${geofenceId}`);
               }}
-              onShare={onShare}
             />
           ))}
         </div>
