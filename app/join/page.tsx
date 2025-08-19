@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { InviteValidationResponse } from '../(dashboard)/(lib)/types';
+import { joinGeofence, validateInvite } from '../(dashboard)/(lib)/supabase/geofences';
 
 function JoinPageContent() {
   const searchParams = useSearchParams();
@@ -29,22 +30,25 @@ function JoinPageContent() {
   // Validate invite code
   useEffect(() => {
     if (inviteCode && userLoaded) {
-      validateInvite(inviteCode);
+      validateInviteCode(inviteCode);
     }
   }, [inviteCode, userLoaded]);
 
-  const validateInvite = async (code: string) => {
+  const validateInviteCode = async (code: string) => {
     setIsValidating(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/geofences/join?code=${encodeURIComponent(code)}`);
-      const data = await response.json();
+      // Use the new server action to validate the invite
+      const result = await validateInvite(code);
       
-      if (response.ok) {
-        setValidationData(data);
+      if (result.success) {
+        setValidationData(result.data);
+        if (!result.data.valid) {
+          setError(result.data.error || 'Invalid or expired invitation code');
+        }
       } else {
-        setError(data.error || 'Invalid or expired invitation code');
+        setError(result.error || 'Failed to validate invitation. Please try again.');
       }
     } catch (error) {
       console.error('Failed to validate invite:', error);
@@ -61,27 +65,17 @@ function JoinPageContent() {
     setError(null);
     
     try {
-      const response = await fetch('/api/geofences/join', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          invite_code: inviteCode,
-          id_user: user.id,
-        }),
-      });
+      // Call server action
+      const result = await joinGeofence(inviteCode);
       
-      const data = await response.json();
-      
-      if (response.ok) {
+      if (result.success) {
         setJoinSuccess(true);
         // Redirect to dashboard after a short delay
         setTimeout(() => {
           window.location.href = '/dashboard';
         }, 2000);
       } else {
-        setError(data.error || 'Failed to join geofence');
+        setError(result.error);
       }
     } catch (error) {
       console.error('Failed to join geofence:', error);

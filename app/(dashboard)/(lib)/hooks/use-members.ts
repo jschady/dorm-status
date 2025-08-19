@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
-import supabase from '../supabase-client';
+import { useSupabase } from '../supabase/client';
 import { GeofenceMemberWithUser } from '../types';
 
 interface UseMembersResult {
@@ -14,17 +14,13 @@ interface UseMembersResult {
 
 export function useMembers(geofenceId: string | null): UseMembersResult {
   const { user, isLoaded } = useUser();
+  const supabase = useSupabase();
   const [members, setMembers] = useState<GeofenceMemberWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMembers = async () => {
-    // Don't do anything if Clerk hasn't loaded yet
-    if (!isLoaded) {
-      return;
-    }
-    
-    if (!geofenceId || !user) {
+    if (!isLoaded || !geofenceId || !user) {
       setMembers([]);
       return;
     }
@@ -33,16 +29,36 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
     setError(null);
 
     try {
-      // Fetch members via API endpoint
-      const response = await fetch(`/api/geofences/${geofenceId}/members`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+      const { data: membersData, error: membersError } = await supabase
+        .from('geofence_members')
+        .select(`
+          id_geofence,
+          id_user,
+          role,
+          status, 
+          last_updated,
+          last_gps_update,
+          joined_at,
+          users (
+            email,
+            full_name
+          )
+        `)
+        .eq('id_geofence', geofenceId)
+        .order('joined_at', { ascending: false });
+
+      if (membersError) {
+        throw new Error(membersError.message);
       }
+
+      // Transform the data to match GeofenceMemberWithUser type
+      const transformedMembers = (membersData || []).map(member => ({
+        ...member,
+        users: member.users?.[0] || null
+      }));
       
-      const { members } = await response.json();
-      setMembers(members || []);
+      setMembers(transformedMembers);
+
     } catch (err) {
       console.error('Failed to fetch members:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch members');
@@ -56,7 +72,7 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
     fetchMembers();
   }, [geofenceId, user, isLoaded]);
 
-  // Real-time subscription for member updates - optimized for incremental updates
+  // Real-time subscription for member updates
   useEffect(() => {
     if (!isLoaded || !geofenceId || !user) return;
 
@@ -65,70 +81,21 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*', // Listen to all events to simplify logic
           schema: 'public',
           table: 'geofence_members',
           filter: `id_geofence=eq.${geofenceId}`
         },
         (payload) => {
-          console.log('Real-time member update received:', payload);
-          
-          // Update only the specific member that changed
-          setMembers(prevMembers => {
-            return prevMembers.map(member => {
-              if (member.id_geofence === payload.new.id_geofence && 
-                  member.id_user === payload.new.id_user) {
-                // Merge the updated fields while preserving user data
-                return {
-                  ...member,
-                  status: payload.new.status,
-                  last_updated: payload.new.last_updated,
-                  last_gps_update: payload.new.last_gps_update
-                };
-              }
-              return member;
-            });
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'geofence_members',
-          filter: `id_geofence=eq.${geofenceId}`
-        },
-        () => {
-          // For new members, we need to refetch to get user data
-          console.log('New member added, refetching...');
+          console.log('Real-time member change received:', payload);
+          // Refetch the entire list to ensure consistency with joined user data
           fetchMembers();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'geofence_members',
-          filter: `id_geofence=eq.${geofenceId}`
-        },
-        (payload) => {
-          console.log('Member removed:', payload);
-          
-          // Remove the member from the list
-          setMembers(prevMembers => {
-            return prevMembers.filter(member => 
-              !(member.id_geofence === payload.old.id_geofence && 
-                member.id_user === payload.old.id_user)
-            );
-          });
         }
       )
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [geofenceId, user, isLoaded]);
 
@@ -138,4 +105,4 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
     error,
     refetch: fetchMembers
   };
-} 
+}

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { XMarkIcon, CheckCircleIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
+import { updateDeviceMapping } from '../../(lib)/supabase/devices';
 
 interface DeviceRegistrationModalProps {
   isOpen: boolean;
@@ -33,21 +34,11 @@ export function DeviceRegistrationModal({ isOpen, onClose, onDeviceRegistered }:
     setError(null);
 
     try {
-      const response = await fetch('/api/device-mapping', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          device_id: deviceId.trim(),
-          enabled: true
-        }),
-      });
+      // Call server action
+      const result = await updateDeviceMapping(deviceId.trim(), true);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to register device: ${response.status}`);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       // Success - show success message

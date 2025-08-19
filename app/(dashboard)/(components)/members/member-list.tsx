@@ -9,6 +9,7 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { GeofenceMemberWithUser } from '../../(lib)/types';
+import { removeMember } from '../../(lib)/supabase/members';
 
 interface MemberListProps {
   members: GeofenceMemberWithUser[];
@@ -153,19 +154,11 @@ export function MemberList({
     setRemovingMember(member.id_user);
 
     try {
-      const response = await fetch(`/api/geofences/${geofenceId}/members`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: member.id_user,
-        }),
-      });
+      // Call server action
+      const result = await removeMember(geofenceId, member.id_user);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to remove member');
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       // Call the callback to refresh the member list

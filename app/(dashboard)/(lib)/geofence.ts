@@ -3,7 +3,7 @@
  * Implements distance calculations and hysteresis logic for status determination
  */
 
-import type { Geofence, GeofenceMember } from './database-client';
+import type { Geofence, GeofenceMember } from './types';
 
 /**
  * Coordinate pair for distance calculations

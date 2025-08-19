@@ -23,12 +23,20 @@ export function InviteShareModal({ isOpen, onClose, geofence }: InviteShareModal
   const [copied, setCopied] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState('');
 
-  // Generate the shareable invitation URL
-  const inviteUrl = `${window.location.origin}/join?invite=${geofence.invite_code}&name=${encodeURIComponent(geofence.name)}`;
+  // Generate the shareable invitation URL on client-side only
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = `${window.location.origin}/join?invite=${geofence.invite_code}&name=${encodeURIComponent(geofence.name)}`;
+      setInviteUrl(url);
+    }
+  }, [geofence.invite_code, geofence.name]);
 
   // Copy to clipboard functionality
   const handleCopyUrl = async () => {
+    if (!inviteUrl) return;
+    
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
@@ -61,15 +69,15 @@ export function InviteShareModal({ isOpen, onClose, geofence }: InviteShareModal
     }
   };
 
-  // Generate QR code when modal opens
+  // Generate QR code when modal opens and URL is ready
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && inviteUrl) {
       generateQRCode();
     } else {
       setQrCode(null);
       setCopied(false);
     }
-  }, [isOpen]);
+  }, [isOpen, inviteUrl]);
 
   // Share via Web Share API (mobile) - TODO: Add back when TypeScript issue is resolved
   const handleNativeShare = async () => {
@@ -129,13 +137,15 @@ export function InviteShareModal({ isOpen, onClose, geofence }: InviteShareModal
             <div className="flex items-center justify-between">
               <input
                 type="text"
-                value={inviteUrl}
+                value={inviteUrl || 'Generating invitation URL...'}
                 readOnly
                 className="bg-transparent text-white text-sm flex-1 mr-2 truncate"
+                placeholder="Generating invitation URL..."
               />
               <button
                 onClick={handleCopyUrl}
-                className="text-indigo-400 hover:text-indigo-300 transition-colors"
+                disabled={!inviteUrl}
+                className="text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {copied ? (
                   <CheckIcon className="h-5 w-5 text-green-400" />
@@ -150,7 +160,8 @@ export function InviteShareModal({ isOpen, onClose, geofence }: InviteShareModal
           <div className="flex gap-3">
             <button
               onClick={handleCopyUrl}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-semibold transition-colors ${
+              disabled={!inviteUrl}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 copied 
                   ? 'bg-green-600 text-white'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white'

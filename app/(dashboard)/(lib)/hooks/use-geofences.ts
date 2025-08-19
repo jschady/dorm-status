@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { useSupabase } from '../supabase/client';
 import type { GeofenceListItem, CreateGeofenceResponse } from '../types';
 
 interface UseGeofencesOptions {
@@ -25,6 +26,7 @@ export function useGeofences({
 }: UseGeofencesOptions = {}): UseGeofencesReturn {
   
   const { isSignedIn, userId, isLoaded } = useAuth();
+  const supabase = useSupabase();
   const [geofences, setGeofences] = useState<GeofenceListItem[]>([]);
   const [isLoading, setIsLoading] = useState(autoFetch);
   const [error, setError] = useState<string | null>(null);
@@ -48,19 +50,54 @@ export function useGeofences({
     try {
       setError(null);
       
-      const response = await fetch('/api/geofences', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Use centralized Supabase client instead of API routes
+      const { data: geofencesData, error: queryError } = await supabase
+        .from('geofences')
+        .select(`
+          id_geofence,
+          name,
+          invite_code,
+          created_at,
+          geofence_members!inner (
+            role,
+            id_user
+          )
+        `)
+        .eq('geofence_members.id_user', userId)
+        .order('created_at', { ascending: false });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to fetch geofences: ${response.status}`);
+      if (queryError) {
+        throw new Error(queryError.message);
       }
 
-      const data: GeofenceListItem[] = await response.json();
+      // Get member counts for each geofence
+      const geofenceIds = geofencesData.map(g => g.id_geofence);
+      
+      const { data: memberCounts, error: countError } = await supabase
+        .from('geofence_members')
+        .select('id_geofence')
+        .in('id_geofence', geofenceIds);
+
+      if (countError) {
+        throw new Error('Failed to retrieve member counts');
+      }
+
+      // Count members per geofence
+      const memberCountMap = memberCounts.reduce((acc, member) => {
+        acc[member.id_geofence] = (acc[member.id_geofence] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Format response
+      const data: GeofenceListItem[] = geofencesData.map(geofence => ({
+        id_geofence: geofence.id_geofence,
+        name: geofence.name,
+        member_count: memberCountMap[geofence.id_geofence] || 0,
+        created_at: geofence.created_at,
+        invite_code: geofence.invite_code,
+        role: geofence.geofence_members[0]?.role || 'member'
+      }));
+
       setGeofences(data);
     } catch (error) {
       console.error('Failed to fetch geofences:', error);

@@ -1,7 +1,7 @@
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { WebhookEvent } from '@clerk/nextjs/server';
-import { adminDb } from '@/app/(dashboard)/(lib)/supabase-admin';
+import { createAdminClient } from '../../../(dashboard)/(lib)/supabase/client';
 
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
@@ -98,11 +98,21 @@ async function handleUserCreated(evt: WebhookEvent) {
   const fullName = [first_name, last_name].filter(Boolean).join(' ') || undefined;
 
   try {
-    await adminDb.createUser({
-      id_user: id as string,
-      email: primaryEmail as string,
-      full_name: fullName,
-    });
+    const supabase = createAdminClient();
+    
+    const { error } = await supabase
+      .from('users')
+      .upsert({
+        id_user: id as string,
+        email: primaryEmail as string,
+        full_name: fullName,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      throw error;
+    }
     
     console.log(`User created in database: ${id} (${primaryEmail})`);
   } catch (error) {
@@ -136,10 +146,20 @@ async function handleUserUpdated(evt: WebhookEvent) {
   // Create full name from first and last name
   const fullName = [first_name, last_name].filter(Boolean).join(' ') || undefined;
 
-  await adminDb.updateUser(id as string, {
-    email: primaryEmail as string,
-    full_name: fullName || undefined,
-  });
+  const supabase = createAdminClient();
+  
+  const { error } = await supabase
+    .from('users')
+    .update({
+      email: primaryEmail as string,
+      full_name: fullName || undefined,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id_user', id as string);
+
+  if (error) {
+    throw error;
+  }
   
   console.log(`User updated in database: ${id} (${primaryEmail})`);
 }
@@ -152,7 +172,16 @@ async function handleUserDeleted(evt: WebhookEvent) {
   const userData = evt.data as any;
   const { id } = userData;
   
-  await adminDb.deleteUser(id as string);
+  const supabase = createAdminClient();
+  
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .eq('id_user', id as string);
+
+  if (error) {
+    throw error;
+  }
   
   console.log(`User and all related data deleted: ${id}`);
 } 

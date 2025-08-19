@@ -4,38 +4,42 @@ import React, { useState } from 'react';
 import { CreateGeofenceModalProps, CreateGeofenceRequest, CreateGeofenceResponse } from '../../(lib)/types';
 import { CreateGeofenceForm } from '../geofence/create-geofence-form';
 import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { createGeofence } from '../../(lib)/supabase/geofences';
 
 export function CreateGeofenceModal({ isOpen, onClose, onGeofenceCreated }: CreateGeofenceModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<CreateGeofenceResponse | null>(null);
 
-  // Handle form submission
+  // Handle form submission using server action
   const handleSubmit = async (formData: CreateGeofenceRequest) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/geofences', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      // Convert form data to FormData for server action
+      const serverFormData = new FormData();
+      serverFormData.append('name', formData.name);
+      serverFormData.append('center_latitude', formData.center_latitude.toString());
+      serverFormData.append('center_longitude', formData.center_longitude.toString());
+      serverFormData.append('radius_meters', formData.radius_meters.toString());
+      if (formData.hysteresis_meters) {
+        serverFormData.append('hysteresis_meters', formData.hysteresis_meters.toString());
+      }
 
-      const data = await response.json();
+      // Call server action
+      const result = await createGeofence(serverFormData);
 
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to create geofence: ${response.status}`);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       // Success - show success message
-      setSuccess(data);
+      setSuccess(result.data);
       
       // Notify parent component
       if (onGeofenceCreated) {
-        onGeofenceCreated(data);
+        onGeofenceCreated(result.data);
       }
       
       // Close modal after a short delay to let user see success message

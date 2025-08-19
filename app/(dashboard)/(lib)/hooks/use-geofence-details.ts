@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
-import supabase from '../supabase-client';
+import { useSupabase } from '../supabase/client';
 import { Geofence } from '../types';
 
 interface UseGeofenceDetailsResult {
@@ -14,6 +14,7 @@ interface UseGeofenceDetailsResult {
 
 export function useGeofenceDetails(geofenceId: string | null): UseGeofenceDetailsResult {
   const { user, isLoaded } = useUser();
+  const supabase = useSupabase();
   const [geofence, setGeofence] = useState<(Geofence & { role: 'owner' | 'member' }) | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

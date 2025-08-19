@@ -11,6 +11,7 @@ import {
   PencilIcon
 } from '@heroicons/react/24/outline';
 import { DeviceRegistrationModal } from '../modals/device-registration-modal';
+import { getDeviceMapping, updateDeviceMapping } from '../../(lib)/supabase/devices';
 
 interface DeviceMapping {
   id: string;
@@ -38,14 +39,13 @@ export function DeviceManagementCard() {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('/api/device-mapping');
-      const data = await response.json();
+      const result = await getDeviceMapping();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch device');
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
-      setDevice(data.device);
+      setDevice(result.data);
     } catch (error) {
       console.error('Failed to fetch device:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch device');
@@ -61,23 +61,21 @@ export function DeviceManagementCard() {
       setIsUpdating(true);
       setError(null);
 
-      const response = await fetch('/api/device-mapping', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          enabled: !device.enabled
-        }),
-      });
+      // Optimistically update UI
+      const newEnabled = !device.enabled;
+      setDevice(prev => prev ? { ...prev, enabled: newEnabled } : prev);
 
-      const data = await response.json();
+      // Call server action
+      const result = await updateDeviceMapping(device.device_id, newEnabled);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update device');
+      if (!result.success) {
+        // Revert optimistic update on error
+        setDevice(prev => prev ? { ...prev, enabled: device.enabled } : prev);
+        throw new Error(result.error);
       }
 
-      setDevice(data.device);
+      // Update with server response
+      setDevice(result.data);
     } catch (error) {
       console.error('Failed to update device:', error);
       setError(error instanceof Error ? error.message : 'Failed to update device');
@@ -95,16 +93,19 @@ export function DeviceManagementCard() {
       setIsUpdating(true);
       setError(null);
 
-      const response = await fetch('/api/device-mapping', {
-        method: 'DELETE',
-      });
+      // Optimistically remove device from UI
+      setDevice(null);
 
-      const data = await response.json();
+      // Call server action to disable device
+      const result = await updateDeviceMapping(device.device_id, false);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove device');
+      if (!result.success) {
+        // Revert optimistic update on error
+        setDevice(device);
+        throw new Error(result.error);
       }
 
+      // Device successfully disabled/removed
       setDevice(null);
     } catch (error) {
       console.error('Failed to remove device:', error);
@@ -114,9 +115,10 @@ export function DeviceManagementCard() {
     }
   };
 
-  const handleDeviceRegistered = () => {
+  const handleDeviceRegistered = (deviceId: string) => {
     // Refresh device data after successful registration
     fetchDevice();
+    setShowRegistrationModal(false);
   };
 
   const formatLastSeen = (timestamp?: string) => {

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { EditGeofenceForm, UpdateGeofenceRequest } from '../geofence/edit-geofence-form';
+import { updateGeofence } from '../../(lib)/supabase/geofences';
 
 export interface GeofenceSettingsModalProps {
   isOpen: boolean;
@@ -28,32 +29,38 @@ export function GeofenceSettingsModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<any | null>(null);
 
-  // Handle form submission
+  // Handle form submission using server action
   const handleSubmit = async (formData: UpdateGeofenceRequest) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/geofences/${geofence.id_geofence}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      // Convert form data to FormData for server action
+      const serverFormData = new FormData();
+      if (formData.name) serverFormData.append('name', formData.name);
+      if (formData.center_latitude !== undefined) {
+        serverFormData.append('center_latitude', formData.center_latitude.toString());
+      }
+      if (formData.center_longitude !== undefined) {
+        serverFormData.append('center_longitude', formData.center_longitude.toString());
+      }
+      if (formData.radius_meters !== undefined) {
+        serverFormData.append('radius_meters', formData.radius_meters.toString());
+      }
 
-      const data = await response.json();
+      // Call server action
+      const result = await updateGeofence(geofence.id_geofence, serverFormData);
 
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to update geofence: ${response.status}`);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       // Success - show success message
-      setSuccess(data);
+      setSuccess(result.data);
       
       // Notify parent component
       if (onGeofenceUpdated) {
-        onGeofenceUpdated(data);
+        onGeofenceUpdated(result.data);
       }
       
       // Close modal after a short delay to let user see success message
