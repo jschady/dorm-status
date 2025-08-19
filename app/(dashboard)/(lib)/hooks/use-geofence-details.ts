@@ -15,12 +15,13 @@ interface UseGeofenceDetailsResult {
 export function useGeofenceDetails(geofenceId: string | null): UseGeofenceDetailsResult {
   const { user } = useUser();
   const [geofence, setGeofence] = useState<(Geofence & { role: 'owner' | 'member' }) | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchGeofence = async () => {
     if (!geofenceId || !user) {
       setGeofence(null);
+      setIsLoading(false);
       return;
     }
 
