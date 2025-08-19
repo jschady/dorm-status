@@ -7,18 +7,22 @@ import { GeofenceList } from '../(dashboard)/(components)/geofence/geofence-list
 import { CreateGeofenceModal } from '../(dashboard)/(components)/modals/create-geofence-modal';
 import { DeviceManagementCard } from '../(dashboard)/(components)/device/device-management-card';
 import { XCircleIcon } from '@heroicons/react/24/outline';
+import { useGeofences } from '../(dashboard)/(lib)/hooks/use-geofences';
 import type { GeofenceListItem } from '../(dashboard)/(lib)/types';
 
-interface DashboardClientProps {
-  initialGeofences: GeofenceListItem[];
-}
-
-export function DashboardClient({ initialGeofences }: DashboardClientProps) {
+export function DashboardClient() {
   const { isSignedIn, isLoaded } = useAuth();
   
-  // Local state for optimistic updates and UI interactions
-  const [geofences, setGeofences] = useState(initialGeofences);
-  const [geofencesError, setGeofencesError] = useState<string | null>(null);
+  // Use the custom hook for geofences management
+  const { 
+    geofences, 
+    isLoading: geofencesLoading, 
+    error: geofencesError, 
+    refreshGeofences,
+    addGeofence,
+    removeGeofence 
+  } = useGeofences();
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Show loading while auth is initializing
@@ -49,25 +53,14 @@ export function DashboardClient({ initialGeofences }: DashboardClientProps) {
   };
 
   const handleGeofenceCreated = (geofence: any) => {
-    // Optimistic update - add new geofence to local state
-    const newGeofence: GeofenceListItem = {
-      id_geofence: geofence.id_geofence,
-      name: geofence.name,
-      member_count: 1, // Owner is automatically added as member
-      created_at: geofence.created_at,
-      invite_code: geofence.invite_code,
-      role: 'owner' // Creator is always the owner
-    };
-    
-    setGeofences(prev => [newGeofence, ...prev]);
+    // Use the hook's optimistic update functionality
+    addGeofence(geofence);
     setIsCreateModalOpen(false);
-    setGeofencesError(null); // Clear any previous errors
   };
 
   const handleRefreshGeofences = async () => {
-    // For now, just reload the page to get fresh data
-    // In a more sophisticated implementation, we could call a refresh server action
-    window.location.reload();
+    // Use the hook's refresh functionality for better UX
+    await refreshGeofences();
   };
 
   return (
@@ -124,7 +117,7 @@ export function DashboardClient({ initialGeofences }: DashboardClientProps) {
             <div className="px-4 py-5 sm:p-6">
               <GeofenceList
                 geofences={geofences || []}
-                isLoading={false} // No loading state with server-fetched data
+                isLoading={geofencesLoading}
                 onCreateNew={() => setIsCreateModalOpen(true)}
                 onRefresh={handleRefreshGeofences}
               />
