@@ -702,6 +702,30 @@ export async function joinGeofence(inviteCode: string): Promise<ServerActionResu
     const token = await getToken({ template: 'supabase' });
     const supabase = createServerClient(token);
 
+    // Ensure user exists in our users table
+    const { error: userUpsertError } = await supabase
+      .from('users')
+      .upsert(
+        { 
+          id_user: userId,
+          email: '', // Will be populated by webhook
+          updated_at: new Date().toISOString()
+        },
+        { 
+          onConflict: 'id_user',
+          ignoreDuplicates: true 
+        }
+      );
+
+    if (userUpsertError) {
+      console.error('Failed to upsert user:', userUpsertError);
+      return {
+        success: false,
+        error: 'Failed to initialize user account',
+        details: userUpsertError
+      };
+    }
+
     // Find geofence by invite code
     const { data: geofence, error: geofenceError } = await supabase
       .from('geofences')

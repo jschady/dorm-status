@@ -29,32 +29,26 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
     setError(null);
 
     try {
-      const { data: membersData, error: membersError } = await supabase
+        const { data: members, error: membersError } = await supabase
         .from('geofence_members')
         .select(`
-          id_geofence,
-          id_user,
-          role,
-          status, 
-          last_updated,
-          last_gps_update,
-          joined_at,
-          users (
-            email,
-            full_name
+          *,
+          users!inner(
+            full_name,
+            email
           )
         `)
         .eq('id_geofence', geofenceId)
-        .order('joined_at', { ascending: false });
+        .order('joined_at', { ascending: true });
 
       if (membersError) {
         throw new Error(membersError.message);
       }
 
       // Transform the data to match GeofenceMemberWithUser type
-      const transformedMembers = (membersData || []).map(member => ({
+      const transformedMembers = (members || []).map(member => ({
         ...member,
-        users: member.users?.[0] || null
+        users: member.users || null
       }));
       
       setMembers(transformedMembers);
