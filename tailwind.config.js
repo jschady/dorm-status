@@ -6,7 +6,15 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'tiger-orange': 'hsl(var(--tiger-orange))',
+        'tiger-orange-light': 'hsl(var(--tiger-orange-light))',
+        'tiger-purple': 'hsl(var(--tiger-purple))',
+        'tiger-blue': 'hsl(var(--tiger-blue))',
+        'tiger-pink': 'hsl(var(--tiger-pink))',
+      },
+    },
   },
   plugins: [],
 } 

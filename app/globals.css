@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities; 
+
+@layer base {
+    :root {
+      --tiger-orange: 25 95% 58%;
+      --tiger-orange-light: 25 95% 68%;
+      --tiger-purple: 260 84% 65%;
+      --tiger-blue: 215 85% 65%;
+      --tiger-pink: 320 85% 70%;
+    }
+  }
+  
