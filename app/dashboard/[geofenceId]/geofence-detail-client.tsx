@@ -8,25 +8,22 @@ import {
   ArrowLeftIcon, 
   ShareIcon,
   Cog6ToothIcon,
-  ExclamationTriangleIcon,
   TrashIcon
 } from '@heroicons/react/24/outline';
-import Link from 'next/link';
 import { MemberList } from '../../(dashboard)/(components)/members/member-list';
 import { InviteShareModal } from '../../(dashboard)/(components)/modals/invite-share-modal';
 import { GeofenceSettingsModal } from '../../(dashboard)/(components)/modals/geofence-settings-modal';
 import { DeleteGeofenceModal } from '../../(dashboard)/(components)/modals/delete-geofence-modal';
 import { deleteGeofence } from '../../(dashboard)/(lib)/supabase/geofences';
+import { useMembers } from '../../(dashboard)/(lib)/hooks/use-members';
 
 interface GeofenceDetailClientProps {
   initialGeofence: any;
-  initialMembers: any[];
   geofenceId: string;
 }
 
 export function GeofenceDetailClient({ 
   initialGeofence, 
-  initialMembers, 
   geofenceId 
 }: GeofenceDetailClientProps) {
   const router = useRouter();
@@ -34,12 +31,13 @@ export function GeofenceDetailClient({
   
   // Local state for optimistic updates and UI interactions
   const [geofence] = useState(initialGeofence);
-  const [members, setMembers] = useState(initialMembers);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   const isOwner = geofence?.role === 'owner';
+
+  const { members, isLoading: membersLoading, error: membersError } = useMembers(geofenceId);
 
   const handleDeleteGeofence = async (geofenceId: string) => {
     try {

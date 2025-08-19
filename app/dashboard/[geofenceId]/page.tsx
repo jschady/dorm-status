@@ -21,10 +21,7 @@ export default async function GeofenceDetailPage({ params }: GeofenceDetailPageP
   const { geofenceId } = await params;
   
   // Fetch geofence and members data server-side in parallel
-  const [geofenceResult, membersResult] = await Promise.all([
-    getGeofenceDetails(geofenceId),
-    getGeofenceMembers(geofenceId)
-  ]);
+  const geofenceResult = await getGeofenceDetails(geofenceId);
 
   // Handle geofence not found or access denied
   if (!geofenceResult.success) {
@@ -48,17 +45,10 @@ export default async function GeofenceDetailPage({ params }: GeofenceDetailPageP
     );
   }
 
-  // Handle members fetch error (show geofence but with empty members)
-  const members = membersResult.success ? membersResult.data : [];
-  if (!membersResult.success) {
-    console.error('Failed to fetch members:', membersResult.error);
-  }
-
   // Pass server-fetched data to client component
   return (
     <GeofenceDetailClient 
       initialGeofence={geofenceResult.data}
-      initialMembers={members}
       geofenceId={geofenceId}
     />
   );
