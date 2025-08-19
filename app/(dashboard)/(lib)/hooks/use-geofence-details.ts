@@ -13,12 +13,17 @@ interface UseGeofenceDetailsResult {
 }
 
 export function useGeofenceDetails(geofenceId: string | null): UseGeofenceDetailsResult {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [geofence, setGeofence] = useState<(Geofence & { role: 'owner' | 'member' }) | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchGeofence = async () => {
+    // Don't do anything if Clerk hasn't loaded yet
+    if (!isLoaded) {
+      return;
+    }
+    
     if (!geofenceId || !user) {
       setGeofence(null);
       setIsLoading(false);
@@ -78,7 +83,7 @@ export function useGeofenceDetails(geofenceId: string | null): UseGeofenceDetail
   // Initial fetch
   useEffect(() => {
     fetchGeofence();
-  }, [geofenceId, user]);
+  }, [geofenceId, user, isLoaded]);
 
   return {
     geofence,

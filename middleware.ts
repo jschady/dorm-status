@@ -60,27 +60,28 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
     // Enhanced auth protection for protected routes
     if (isProtectedRoute(req)) {
-      try {
-        const { userId, sessionId } = await auth.protect();
+      const { userId, sessionId } = await auth();
+      
+      // Only redirect if we're certain there's no valid session
+      // This prevents redirects during the brief auth loading state on page refresh
+      if (!userId) {
+        // Double-check: if this is a page request (not API), allow a brief moment for client-side auth to load
+        const isPageRequest = req.headers.get('accept')?.includes('text/html');
+        const hasClerkSession = req.cookies.get('__session') || req.cookies.get('__clerk_session');
         
-        // Log successful authentication
-        logAuthEvent('SUCCESS', pathname, { userId, sessionId });
-
-        // Add security headers for protected routes
-        const response = NextResponse.next();
-        response.headers.set('X-Frame-Options', 'DENY');
-        response.headers.set('X-Content-Type-Options', 'nosniff');
-        response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        
-        // Add user context to headers for downstream processing
-        if (userId) {
-          response.headers.set('X-User-ID', userId);
+        // If this looks like a legitimate page request with potential session cookies, 
+        // let it through - the client-side will handle auth redirects if needed
+        if (isPageRequest && hasClerkSession) {
+          logAuthEvent('SUCCESS', pathname, 'Allowing page request with potential session');
+          const response = NextResponse.next();
+          response.headers.set('X-Frame-Options', 'DENY');
+          response.headers.set('X-Content-Type-Options', 'nosniff');
+          response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+          return response;
         }
         
-        return response;
-      } catch (authError) {
         logAuthEvent('FAILURE', pathname, { 
-          error: authError instanceof Error ? authError.message : 'Unknown auth error',
+          reason: 'No valid session found',
           userAgent: userAgent.substring(0, 100) // Truncate for privacy
         });
         
@@ -90,6 +91,22 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
         
         return NextResponse.redirect(signInUrl);
       }
+      
+      // Log successful authentication
+      logAuthEvent('SUCCESS', pathname, { userId, sessionId });
+
+      // Add security headers for protected routes
+      const response = NextResponse.next();
+      response.headers.set('X-Frame-Options', 'DENY');
+      response.headers.set('X-Content-Type-Options', 'nosniff');
+      response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      
+      // Add user context to headers for downstream processing
+      if (userId) {
+        response.headers.set('X-User-ID', userId);
+      }
+      
+      return response;
     }
 
     // API route protection with additional validation

@@ -13,12 +13,17 @@ interface UseMembersResult {
 }
 
 export function useMembers(geofenceId: string | null): UseMembersResult {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [members, setMembers] = useState<GeofenceMemberWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMembers = async () => {
+    // Don't do anything if Clerk hasn't loaded yet
+    if (!isLoaded) {
+      return;
+    }
+    
     if (!geofenceId || !user) {
       setMembers([]);
       return;
@@ -49,11 +54,11 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
   // Initial fetch
   useEffect(() => {
     fetchMembers();
-  }, [geofenceId, user]);
+  }, [geofenceId, user, isLoaded]);
 
   // Real-time subscription for member updates - optimized for incremental updates
   useEffect(() => {
-    if (!geofenceId || !user) return;
+    if (!isLoaded || !geofenceId || !user) return;
 
     const channel = supabase
       .channel(`geofence-members-${geofenceId}`)
@@ -125,7 +130,7 @@ export function useMembers(geofenceId: string | null): UseMembersResult {
     return () => {
       channel.unsubscribe();
     };
-  }, [geofenceId, user]);
+  }, [geofenceId, user, isLoaded]);
 
   return {
     members,

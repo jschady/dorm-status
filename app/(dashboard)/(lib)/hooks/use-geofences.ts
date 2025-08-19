@@ -24,13 +24,21 @@ export function useGeofences({
   refetchInterval 
 }: UseGeofencesOptions = {}): UseGeofencesReturn {
   
-  const { isSignedIn, userId } = useAuth();
+  const { isSignedIn, userId, isLoaded } = useAuth();
   const [geofences, setGeofences] = useState<GeofenceListItem[]>([]);
   const [isLoading, setIsLoading] = useState(autoFetch);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep loading state true until auth is loaded
+  const effectiveIsLoading = isLoading || (autoFetch && !isLoaded);
+
   // Fetch geofences from API
   const fetchGeofences = useCallback(async () => {
+    // Don't do anything if Clerk hasn't loaded yet
+    if (!isLoaded) {
+      return;
+    }
+    
     if (!isSignedIn || !userId) {
       setGeofences([]);
       setIsLoading(false);
@@ -61,7 +69,7 @@ export function useGeofences({
     } finally {
       setIsLoading(false);
     }
-  }, [isSignedIn, userId]);
+  }, [isSignedIn, userId, isLoaded]);
 
   // Refresh geofences (with loading state)
   const refreshGeofences = useCallback(async () => {
@@ -90,38 +98,38 @@ export function useGeofences({
 
   // Auto-fetch on mount and when auth state changes
   useEffect(() => {
-    if (autoFetch && isSignedIn) {
+    if (autoFetch && isLoaded && isSignedIn) {
       fetchGeofences();
-    } else if (!isSignedIn) {
+    } else if (isLoaded && !isSignedIn) {
       setGeofences([]);
       setIsLoading(false);
       setError(null);
     }
-  }, [fetchGeofences, autoFetch, isSignedIn]);
+  }, [fetchGeofences, autoFetch, isSignedIn, isLoaded]);
 
   // Set up auto-refresh interval
   useEffect(() => {
-    if (!refetchInterval || !isSignedIn) return;
+    if (!refetchInterval || !isLoaded || !isSignedIn) return;
 
     const interval = setInterval(() => {
       fetchGeofences();
     }, refetchInterval);
 
     return () => clearInterval(interval);
-  }, [fetchGeofences, refetchInterval, isSignedIn]);
+  }, [fetchGeofences, refetchInterval, isSignedIn, isLoaded]);
 
   // Handle auth state changes
   useEffect(() => {
-    if (!isSignedIn) {
+    if (isLoaded && !isSignedIn) {
       setGeofences([]);
       setError(null);
       setIsLoading(false);
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, isLoaded]);
 
   return {
     geofences,
-    isLoading,
+    isLoading: effectiveIsLoading,
     error,
     fetchGeofences,
     refreshGeofences,
