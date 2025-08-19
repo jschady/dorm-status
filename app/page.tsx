@@ -1,6 +1,7 @@
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import GoogleSignInButton from "./components/google-signin-button";
 
 export default async function Home() {
   // Check if user is authenticated, if so redirect to dashboard
@@ -29,11 +30,7 @@ export default async function Home() {
           {/* Login Button */}
           <div className="flex items-center justify-end">
             <SignedOut>
-              <SignInButton>
-                <button className="bg-indigo-600 hover:bg-indigo-500 text-white text-center px-4 py-2 rounded-lg font-bold duration-100">
-                  Log In
-                </button>
-              </SignInButton>
+              <GoogleSignInButton />
             </SignedOut>
             
             <SignedIn>
@@ -93,12 +90,11 @@ export default async function Home() {
 
           {/* Call to Action */}
           <SignedOut>
-            <div className="space-y-6">
-                <SignUpButton>
-                  <button className="w-full max-w-md mx-auto block bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-purple-600 hover:via-indigo-600 hover:to-purple-600 text-white font-bold py-4 px-8 rounded-2xl transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:scale-105 text-lg">
-                    🚀 Get Started - Sign Up Free
-                  </button>
-                </SignUpButton>
+            <div className="space-y-6">               
+                  <GoogleSignInButton 
+                    variant="cta" 
+                    text="🔑 Sign Up with Google"
+                  />
             </div>
           </SignedOut>
 

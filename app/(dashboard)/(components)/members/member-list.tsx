@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   UserIcon, 
   UserGroupIcon, 
   ClockIcon,
-  StarIcon
+  StarIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import { GeofenceMemberWithUser } from '../../(lib)/types';
 
@@ -13,14 +14,19 @@ interface MemberListProps {
   members: GeofenceMemberWithUser[];
   isLoading?: boolean;
   currentUserId?: string;
+  currentUserRole?: 'owner' | 'member';
+  geofenceId?: string;
+  onMemberRemoved?: () => void;
 }
 
 interface MemberCardProps {
   member: GeofenceMemberWithUser;
   isCurrentUser: boolean;
+  canRemove: boolean;
+  onRemove: (member: GeofenceMemberWithUser) => void;
 }
 
-function MemberCard({ member, isCurrentUser }: MemberCardProps) {
+function MemberCard({ member, isCurrentUser, canRemove, onRemove }: MemberCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'IN_ROOM':
@@ -90,8 +96,22 @@ function MemberCard({ member, isCurrentUser }: MemberCardProps) {
           </div>
         </div>
         
-        <div className={`px-3 py-1 rounded-full border text-sm font-medium ${getStatusColor(member.status)}`}>
-          {getStatusText(member.status)}
+        <div className="flex items-center gap-2">
+          <div className={`px-3 py-1 rounded-full border text-sm font-medium ${getStatusColor(member.status)}`}>
+            {getStatusText(member.status)}
+          </div>
+          {canRemove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(member);
+              }}
+              className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+              title="Remove member"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -111,7 +131,54 @@ function MemberCard({ member, isCurrentUser }: MemberCardProps) {
   );
 }
 
-export function MemberList({ members, isLoading = false, currentUserId }: MemberListProps) {
+export function MemberList({ 
+  members, 
+  isLoading = false, 
+  currentUserId, 
+  currentUserRole,
+  geofenceId,
+  onMemberRemoved 
+}: MemberListProps) {
+  const [removingMember, setRemovingMember] = useState<string | null>(null);
+
+  const handleRemoveMember = async (member: GeofenceMemberWithUser) => {
+    if (!geofenceId || removingMember) return;
+
+    const confirmRemove = window.confirm(
+      `Are you sure you want to remove ${member.users?.full_name || 'this user'} from the geofence?`
+    );
+
+    if (!confirmRemove) return;
+
+    setRemovingMember(member.id_user);
+
+    try {
+      const response = await fetch(`/api/geofences/${geofenceId}/members`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: member.id_user,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove member');
+      }
+
+      // Call the callback to refresh the member list
+      if (onMemberRemoved) {
+        onMemberRemoved();
+      }
+    } catch (error) {
+      console.error('Failed to remove member:', error);
+      alert(`Failed to remove member: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setRemovingMember(null);
+    }
+  };
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -172,13 +239,23 @@ export function MemberList({ members, isLoading = false, currentUserId }: Member
       </div>
 
       <div className="space-y-3">
-        {sortedMembers.map((member) => (
-          <MemberCard
-            key={`${member.id_geofence}-${member.id_user}`}
-            member={member}
-            isCurrentUser={member.id_user === currentUserId}
-          />
-        ))}
+        {sortedMembers.map((member) => {
+          const isCurrentUser = member.id_user === currentUserId;
+          const canRemove = currentUserRole === 'owner' && 
+                           !isCurrentUser && 
+                           member.role !== 'owner' &&
+                           removingMember !== member.id_user;
+
+          return (
+            <MemberCard
+              key={`${member.id_geofence}-${member.id_user}`}
+              member={member}
+              isCurrentUser={isCurrentUser}
+              canRemove={canRemove}
+              onRemove={handleRemoveMember}
+            />
+          );
+        })}
       </div>
     </div>
   );

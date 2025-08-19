@@ -26,7 +26,7 @@ export default function GeofenceDetailPage() {
   const geofenceId = params.geofenceId as string;
   
   const { geofence, isLoading: geofenceLoading, error: geofenceError } = useGeofenceDetails(geofenceId);
-  const { members, isLoading: membersLoading, error: membersError } = useMembers(geofenceId);
+  const { members, isLoading: membersLoading, error: membersError, refetch: refetchMembers } = useMembers(geofenceId);
   
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -223,6 +223,12 @@ export default function GeofenceDetailPage() {
             members={members}
             isLoading={membersLoading}
             currentUserId={user?.id}
+            currentUserRole={geofence?.role}
+            geofenceId={geofenceId}
+            onMemberRemoved={() => {
+              // Refresh the member list when a member is removed
+              refetchMembers();
+            }}
           />
         </div>
 
