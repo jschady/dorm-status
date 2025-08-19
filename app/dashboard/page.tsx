@@ -4,17 +4,11 @@ import React, { useState } from 'react';
 import { SignOutButton } from '@clerk/nextjs';
 import { useAuth } from '@clerk/nextjs';
 import { useGeofences } from '../(dashboard)/(lib)/hooks/use-geofences';
-import { GeofenceListItem } from '../(dashboard)/(lib)/types';
 import { GeofenceList } from '../(dashboard)/(components)/geofence/geofence-list';
 import { CreateGeofenceModal } from '../(dashboard)/(components)/modals/create-geofence-modal';
 import { DeviceManagementCard } from '../(dashboard)/(components)/device/device-management-card';
-import { 
-  ExclamationTriangleIcon,
-  CheckCircleIcon,
+import {
   XCircleIcon,
-  UserGroupIcon,
-  MapPinIcon,
-  PlusIcon
 } from '@heroicons/react/24/outline';
 
 export default function DashboardPage() {
@@ -26,7 +20,6 @@ export default function DashboardPage() {
     error: geofencesError,
     refreshGeofences,
     addGeofence,
-    removeGeofence,
   } = useGeofences();
 
   // Modal states
