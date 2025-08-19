@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
         },
         { 
           onConflict: 'id_user',
-          ignoreDuplicates: false 
+          ignoreDuplicates: true 
         }
       );
 
