@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
-import Providers from "./(dashboard)/(components)/providers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -41,26 +41,6 @@ export const metadata: Metadata = {
     { rel: "apple-touch-icon", url: "/icon-192x192.png?v=3", sizes: "192x192" },
     { rel: "shortcut icon", url: "/favicon.ico?v=3" },
   ],
-  openGraph: {
-    type: "website",
-    siteName: "Tiger Dorm Dashboard",
-    title: "Tiger Dorm Dashboard",
-    description: "Real-time status tracking dashboard for dorm roommates",
-    images: [
-      {
-        url: "/icon-512x512.png?v=3",
-        width: 512,
-        height: 512,
-        alt: "Tiger Dorm Dashboard",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary",
-    title: "Tiger Dorm Dashboard",
-    description: "Real-time status tracking dashboard for dorm roommates",
-    images: ["/icon-512x512.png?v=3"],
-  },
 };
 
 export const viewport: Viewport = {
@@ -81,17 +61,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Additional PWA Meta Tags not handled by metadata API */}
+        {/* PWA-specific mobile optimizations */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="msapplication-config" content="/icons/browserconfig.xml" />
         <meta name="msapplication-TileColor" content="#4f46e5" />
         <meta name="msapplication-tap-highlight" content="no" />
       </head>
       <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
         <ClerkProvider>
-          <Providers>
-            {children}
-          </Providers>
+          {children}
+          <SpeedInsights />
         </ClerkProvider>
       </body>
     </html>

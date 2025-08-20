@@ -61,12 +61,12 @@ Built with **Next.js 15+ App Router** and organized using **route groups** for c
 
 ```
 app/
-├── layout.tsx                    # Root layout with metadata & providers
+├── layout.tsx                    # Root layout with metadata
 ├── page.tsx                     # Main dashboard (Client Component)
 ├── globals.css                  # Global Tailwind styles
 └── (dashboard)/                 # Route group (doesn't affect URL)
     ├── (components)/           # UI Components route group
-    │   ├── providers.tsx       # Client-side providers wrapper
+    
     │   ├── status-card.tsx     # Individual status display card
     │   └── modals/            # Modal components directory
     │       ├── status-update-modal.tsx   # Status selection modal
