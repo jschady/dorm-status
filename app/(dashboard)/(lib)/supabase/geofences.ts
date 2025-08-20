@@ -245,7 +245,7 @@ export async function createGeofence(formData: FormData): Promise<ServerActionRe
     const center_latitude = parseFloat(centerLatStr);
     const center_longitude = parseFloat(centerLngStr);
     const radius_meters = parseInt(radiusStr);
-    const hysteresis_meters = hysteresisStr ? parseInt(hysteresisStr) : Math.round(Math.min(radius_meters * 0.1, 50));
+    const hysteresis_meters = hysteresisStr ? parseInt(hysteresisStr) : Math.max(5, Math.round(Math.min(radius_meters * 0.1, 50)));
 
     // Validate required fields
     if (!name?.trim()) {
@@ -453,7 +453,7 @@ export async function updateGeofence(geofenceId: string, formData: FormData): Pr
       const radius_meters = parseInt(radiusStr);
       if (!isNaN(radius_meters) && radius_meters >= 10 && radius_meters <= 1000) {
         updates.radius_meters = radius_meters;
-        updates.hysteresis_meters = Math.round(Math.min(radius_meters * 0.1, 50));
+        updates.hysteresis_meters = Math.max(5, Math.round(Math.min(radius_meters * 0.1, 50)));
       }
     }
 
