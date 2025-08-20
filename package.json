@@ -2,14 +2,12 @@
   "name": "tigerdorm",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "pwa:build": "next build && npm run pwa:generate-sw",
-    "pwa:generate-sw": "echo 'Service worker already included in public/sw.js'",
-    "test:pwa": "npm run build && npm run start"
+    "lint": "next lint"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.31.1",
