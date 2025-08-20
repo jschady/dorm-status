@@ -6,7 +6,7 @@ const withSerwist = withSerwistInit({
   swDest: "public/sw.js",
   cacheOnNavigation: true,
   reloadOnOnline: true,
-  disable: process.env.NODE_ENV === "development", // Disable in development for easier debugging
+  // disable: process.env.NODE_ENV === "development", // Disable in development for easier debugging
 });
 
 /** @type {import('next').NextConfig} */
