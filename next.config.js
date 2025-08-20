@@ -1,3 +1,14 @@
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  // Note: Using app directory structure
+  swSrc: "app/sw.ts",
+  swDest: "public/sw.js",
+  cacheOnNavigation: true,
+  reloadOnOnline: true,
+  disable: process.env.NODE_ENV === "development", // Disable in development for easier debugging
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable React strict mode for better development experience
@@ -15,8 +26,7 @@ const nextConfig = {
           },
           {
             key: 'Cache-Control',
-            // TEMPORARILY DISABLED FOR TESTING - Change back to 'public, max-age=31536000, immutable' for production
-            value: 'no-cache, no-store, must-revalidate',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },
@@ -38,8 +48,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            // TEMPORARILY DISABLED FOR TESTING - Change back to 'public, max-age=31536000, immutable' for production
-            value: 'no-cache, no-store, must-revalidate',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },
@@ -53,4 +62,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig 
+export default withSerwist(nextConfig); 
