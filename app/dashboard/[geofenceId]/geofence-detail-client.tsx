@@ -14,7 +14,9 @@ import { MemberList } from '../../(dashboard)/(components)/members/member-list';
 import { InviteShareModal } from '../../(dashboard)/(components)/modals/invite-share-modal';
 import { GeofenceSettingsModal } from '../../(dashboard)/(components)/modals/geofence-settings-modal';
 import { DeleteGeofenceModal } from '../../(dashboard)/(components)/modals/delete-geofence-modal';
+import { LeaveGeofenceModal } from '../../(dashboard)/(components)/modals/leave-geofence-modal';
 import { deleteGeofence } from '../../(dashboard)/(lib)/supabase/geofences';
+import { leaveGeofence } from '../../(dashboard)/(lib)/supabase/members';
 import { useMembers } from '../../(dashboard)/(lib)/hooks/use-members';
 
 interface GeofenceDetailClientProps {
@@ -34,6 +36,7 @@ export function GeofenceDetailClient({
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   
   const isOwner = geofence?.role === 'owner';
 
@@ -51,6 +54,22 @@ export function GeofenceDetailClient({
       router.push('/dashboard');
     } catch (error) {
       console.error('Failed to delete geofence:', error);
+      throw error; // Re-throw so modal can handle it
+    }
+  };
+
+  const handleLeaveGeofence = async (geofenceId: string) => {
+    try {
+      const result = await leaveGeofence(geofenceId);
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      // Redirect to dashboard after successfully leaving
+      router.push('/dashboard');
+    } catch (error) {
+      console.error('Failed to leave geofence:', error);
       throw error; // Re-throw so modal can handle it
     }
   };
@@ -117,6 +136,16 @@ export function GeofenceDetailClient({
               >
                 <TrashIcon className="h-4 w-4" />
                 Delete
+              </button>
+            )}
+            
+            {!isOwner && (
+              <button 
+                onClick={() => setShowLeaveModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Leave
               </button>
             )}
           </div>
@@ -229,6 +258,19 @@ export function GeofenceDetailClient({
             isOpen={showDeleteModal}
             onClose={() => setShowDeleteModal(false)}
             onConfirm={handleDeleteGeofence}
+            geofence={{
+              id_geofence: geofence.id_geofence,
+              name: geofence.name
+            }}
+          />
+        )}
+
+        {/* Leave Confirmation Modal */}
+        {!isOwner && (
+          <LeaveGeofenceModal
+            isOpen={showLeaveModal}
+            onClose={() => setShowLeaveModal(false)}
+            onConfirm={handleLeaveGeofence}
             geofence={{
               id_geofence: geofence.id_geofence,
               name: geofence.name

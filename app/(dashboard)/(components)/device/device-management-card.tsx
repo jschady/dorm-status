@@ -11,7 +11,7 @@ import {
   PencilIcon
 } from '@heroicons/react/24/outline';
 import { DeviceRegistrationModal } from '../modals/device-registration-modal';
-import { getDeviceMapping, updateDeviceMapping } from '../../(lib)/supabase/devices';
+import { getDeviceMapping, updateDeviceMapping, deleteDeviceMapping } from '../../(lib)/supabase/devices';
 
 interface DeviceMapping {
   id: string;
@@ -85,7 +85,7 @@ export function DeviceManagementCard() {
   };
 
   const removeDevice = async () => {
-    if (!device || !confirm('Are you sure you want to remove this device? Location tracking will stop.')) {
+    if (!device || !confirm('Are you sure you want to permanently remove this device? This cannot be undone and location tracking will stop.')) {
       return;
     }
 
@@ -96,8 +96,8 @@ export function DeviceManagementCard() {
       // Optimistically remove device from UI
       setDevice(null);
 
-      // Call server action to disable device
-      const result = await updateDeviceMapping(device.device_id, false);
+      // Call server action to delete device
+      const result = await deleteDeviceMapping();
 
       if (!result.success) {
         // Revert optimistic update on error
@@ -105,7 +105,7 @@ export function DeviceManagementCard() {
         throw new Error(result.error);
       }
 
-      // Device successfully disabled/removed
+      // Device successfully deleted
       setDevice(null);
     } catch (error) {
       console.error('Failed to remove device:', error);

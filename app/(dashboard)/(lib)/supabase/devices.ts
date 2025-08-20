@@ -229,3 +229,62 @@ export async function updateDeviceMapping(
     };
   }
 }
+
+/**
+ * Delete user's device mapping (permanently remove from database)
+ * 
+ * @returns Promise<ServerActionResult<void>>
+ * 
+ * @example
+ * ```tsx
+ * const result = await deleteDeviceMapping();
+ * if (result.success) {
+ *   console.log('Device successfully removed');
+ * }
+ * ```
+ */
+export async function deleteDeviceMapping(): Promise<ServerActionResult<void>> {
+  try {
+    // Verify authentication
+    const { getToken, userId } = await auth();
+    
+    if (!userId) {
+      return {
+        success: false,
+        error: 'Unauthorized - Please sign in to delete device'
+      };
+    }
+
+    // Create authenticated client
+    const token = await getToken({ template: 'supabase' });
+    const supabase = createServerClient(token);
+
+    // Delete the device mapping
+    const { error: deleteError } = await supabase
+      .from('device_mappings')
+      .delete()
+      .eq('id_user', userId);
+
+    if (deleteError) {
+      console.error('Error deleting device mapping:', deleteError);
+      return {
+        success: false,
+        error: 'Failed to delete device',
+        details: deleteError
+      };
+    }
+
+    // Revalidate relevant paths
+    revalidatePath('/dashboard');
+
+    return { success: true, data: undefined };
+
+  } catch (error) {
+    console.error('Device deletion error:', error);
+    return {
+      success: false,
+      error: 'Internal server error',
+      details: error
+    };
+  }
+}

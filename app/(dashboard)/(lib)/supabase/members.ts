@@ -431,3 +431,77 @@ export async function addMember(
     };
   }
 } 
+
+/**
+ * Leave a geofence (remove yourself as a member)
+ * 
+ * @param geofenceId - The ID of the geofence to leave
+ * @returns Promise<ServerActionResult<void>>
+ */
+export async function leaveGeofence(geofenceId: string): Promise<ServerActionResult<void>> {
+  try {
+    // Verify authentication
+    const { getToken, userId } = await auth();
+    
+    if (!userId) {
+      return {
+        success: false,
+        error: 'Unauthorized - Please sign in to leave geofence'
+      };
+    }
+
+    // Create authenticated client
+    const token = await getToken({ template: 'supabase' });
+    const supabase = createServerClient(token);
+
+    // Verify the user is actually a member of this geofence
+    const { data: membership, error: membershipError } = await supabase
+      .from('geofence_members')
+      .select('role')
+      .eq('id_geofence', geofenceId)
+      .eq('id_user', userId)
+      .single();
+    
+    if (membershipError || !membership) {
+      return {
+        success: false,
+        error: 'You are not a member of this geofence'
+      };
+    }
+
+    // Prevent owners from leaving their own geofence
+    // They should delete the geofence instead
+    if (membership.role === 'owner') {
+      return {
+        success: false,
+        error: 'Owners cannot leave their own geofence. Please delete the geofence instead.'
+      };
+    }
+
+    // Remove the member (yourself)
+    const { error: deleteError } = await supabase
+      .from('geofence_members')
+      .delete()
+      .eq('id_geofence', geofenceId)
+      .eq('id_user', userId);
+
+    if (deleteError) {
+      console.error('Failed to leave geofence:', deleteError);
+      return {
+        success: false,
+        error: 'Failed to leave geofence',
+        details: deleteError
+      };
+    }
+
+    return { success: true, data: undefined };
+
+  } catch (error) {
+    console.error('Leave geofence error:', error);
+    return {
+      success: false,
+      error: 'Internal server error',
+      details: error
+    };
+  }
+} 
