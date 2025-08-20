@@ -47,6 +47,9 @@ export function GeofenceSettingsModal({
       if (formData.radius_meters !== undefined) {
         serverFormData.append('radius_meters', formData.radius_meters.toString());
       }
+      if (formData.hysteresis_meters !== undefined) {
+        serverFormData.append('hysteresis_meters', formData.hysteresis_meters.toString());
+      }
 
       // Call server action
       const result = await updateGeofence(geofence.id_geofence, serverFormData);
@@ -63,10 +66,10 @@ export function GeofenceSettingsModal({
         onGeofenceUpdated(result.data);
       }
       
-      // Close modal after a short delay to let user see success message
+      // Close modal after a longer delay to let user see success message
       setTimeout(() => {
         handleClose();
-      }, 2000);
+      }, 5000);
 
     } catch (error) {
       console.error('Failed to update geofence:', error);

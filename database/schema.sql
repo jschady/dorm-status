@@ -1,5 +1,4 @@
--- Tiger Dorm Database Schema
--- Multi-user dorm status tracking with geofences and real-time updates
+-- Tiger Dorm Database Schema (Final Version with Anti-Recursion RLS)
 
 -- Enable UUID extension for generating UUIDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -59,25 +58,16 @@ CREATE TABLE device_mappings (
 -- =============================================================================
 -- INDEXES FOR PERFORMANCE
 -- =============================================================================
-
--- Users table indexes
 CREATE INDEX idx_users_email ON users(email);
-
--- Geofences table indexes
 CREATE INDEX idx_geofences_owner ON geofences(id_user);
 CREATE INDEX idx_geofences_invite_code ON geofences(invite_code);
-
--- Geofence members table indexes
 CREATE INDEX idx_geofence_members_user ON geofence_members(id_user);
 CREATE INDEX idx_geofence_members_geofence ON geofence_members(id_geofence);
-CREATE INDEX idx_geofence_members_last_updated ON geofence_members(last_updated);
-
--- Device mappings table indexes
 CREATE INDEX idx_device_mappings_user ON device_mappings(id_user);
 CREATE INDEX idx_device_mappings_device ON device_mappings(device_id);
 
 -- =============================================================================
--- ROW LEVEL SECURITY POLICIES
+-- RLS POLICIES (Using Clerk JWT & Helper Function)
 -- =============================================================================
 
 -- Enable RLS on all tables
@@ -87,60 +77,94 @@ ALTER TABLE geofence_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_mappings ENABLE ROW LEVEL SECURITY;
 
 -- Users table policies
-CREATE POLICY "Users can view own record" ON users
-  FOR SELECT USING (auth.uid()::text = id_user);
+CREATE POLICY "Users can view their own record" ON users
+  FOR SELECT USING (get_current_user_id() = id_user);
 
-CREATE POLICY "Users can update own record" ON users
-  FOR UPDATE USING (auth.uid()::text = id_user);
+CREATE POLICY "Users can update their own record" ON users
+  FOR UPDATE USING (get_current_user_id() = id_user);
 
--- Note: User creation/deletion is handled by webhooks with service role
+-- Allow authenticated users to insert their own records
+CREATE POLICY "Users can create their own record" ON users
+  FOR INSERT WITH CHECK (get_current_user_id() = id_user);
 
 -- Geofences table policies
-CREATE POLICY "Users can view accessible geofences" ON geofences
-  FOR SELECT USING (
-    id_user = auth.uid()::text OR
-    id_geofence IN (
-      SELECT id_geofence FROM geofence_members
-      WHERE id_user = auth.uid()::text
-    )
-  );
+CREATE POLICY "Users can view geofences they are a member of" ON geofences
+  FOR SELECT USING (id_geofence IN (SELECT geofence_id FROM get_current_user_geofences()));
 
-CREATE POLICY "Users can create own geofences" ON geofences
-  FOR INSERT WITH CHECK (id_user = auth.uid()::text);
+CREATE POLICY "Authenticated users can create geofences" ON geofences
+  FOR INSERT WITH CHECK (id_user = get_current_user_id());
 
-CREATE POLICY "Owners can update geofences" ON geofences
-  FOR UPDATE USING (id_user = auth.uid()::text);
+CREATE POLICY "Owners can update their geofences" ON geofences
+  FOR UPDATE USING (id_user = get_current_user_id());
 
-CREATE POLICY "Owners can delete geofences" ON geofences
-  FOR DELETE USING (id_user = auth.uid()::text);
+CREATE POLICY "Owners can delete their geofences" ON geofences
+  FOR DELETE USING (id_user = get_current_user_id());
 
 -- Geofence members table policies
-CREATE POLICY "Members can view geofence members" ON geofence_members
-  FOR SELECT USING (
-    id_geofence IN (
-      SELECT id_geofence FROM geofence_members AS gm2
-      WHERE gm2.id_user = auth.uid()::text
-    )
+CREATE POLICY "Members can view other members of the same geofence" ON geofence_members
+  FOR SELECT USING (id_geofence IN (SELECT geofence_id FROM get_current_user_geofences()));
+  
+CREATE POLICY "Users can update their own member status" ON geofence_members
+  FOR UPDATE USING (id_user = get_current_user_id());
+  
+CREATE POLICY "Owners can remove other members" ON geofence_members
+  FOR DELETE USING (
+    id_user != get_current_user_id() AND
+    id_geofence IN (SELECT geofence_id FROM get_current_user_geofences() WHERE role = 'owner')
   );
 
+CREATE POLICY "Members can leave a geofence" ON geofence_members
+  FOR DELETE USING (id_user = get_current_user_id() AND role = 'member');
 
-CREATE POLICY "Users can update own status" ON geofence_members
-  FOR UPDATE USING (id_user = auth.uid()::text);
-
--- Owners can manage members (handled by service role for complex operations)
-CREATE POLICY "Service role can manage members" ON geofence_members
-  FOR ALL USING (auth.role() = 'service_role');
+-- Allow authenticated users to join geofences
+CREATE POLICY "Users can join geofences" ON geofence_members
+  FOR INSERT WITH CHECK (id_user = get_current_user_id());
 
 -- Device mappings table policies
-CREATE POLICY "Users can view own devices" ON device_mappings
-  FOR SELECT USING (id_user = auth.uid()::text);
+CREATE POLICY "Users can manage their own device mappings" ON device_mappings
+  FOR ALL USING (id_user = get_current_user_id());
 
-CREATE POLICY "Users can manage own devices" ON device_mappings
-  FOR ALL USING (id_user = auth.uid()::text);
 
 -- =============================================================================
 -- FUNCTIONS AND TRIGGERS
 -- =============================================================================
+
+-- Function to extract current user ID from Clerk JWT token
+CREATE OR REPLACE FUNCTION get_current_user_id()
+RETURNS TEXT AS $$
+BEGIN
+  -- Extract user ID from JWT token claims set by Supabase
+  RETURN COALESCE(
+    current_setting('request.jwt.claims', true)::json ->> 'sub',
+    current_setting('request.jwt.claim.sub', true)
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get geofences that the current user is a member of
+CREATE OR REPLACE FUNCTION get_current_user_geofences()
+RETURNS TABLE(geofence_id UUID, role TEXT) AS $$
+DECLARE
+  current_user_id TEXT;
+BEGIN
+  -- Get the current user ID
+  current_user_id := get_current_user_id();
+  
+  -- Return empty if no user ID
+  IF current_user_id IS NULL THEN
+    RETURN;
+  END IF;
+  
+  -- Return geofences where this user is a member
+  RETURN QUERY
+  SELECT gm.id_geofence, gm.role
+  FROM geofence_members gm
+  WHERE gm.id_user = current_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to update the updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -162,8 +186,8 @@ CREATE TRIGGER update_geofences_updated_at BEFORE UPDATE ON geofences
 CREATE OR REPLACE FUNCTION add_owner_as_member()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO geofence_members (id_geofence, id_user, role)
-    VALUES (NEW.id_geofence, NEW.id_user, 'owner');
+    INSERT INTO geofence_members (id_geofence, id_user, role, status)
+    VALUES (NEW.id_geofence, NEW.id_user, 'owner', 'AWAY');
     RETURN NEW;
 END;
 $$ language 'plpgsql';
@@ -177,7 +201,6 @@ CREATE TRIGGER add_owner_as_member_trigger
 -- REALTIME SUBSCRIPTIONS
 -- =============================================================================
 
--- Enable realtime for status updates
 ALTER publication supabase_realtime ADD TABLE geofence_members;
 ALTER publication supabase_realtime ADD TABLE geofences;
 ALTER publication supabase_realtime ADD TABLE device_mappings;
