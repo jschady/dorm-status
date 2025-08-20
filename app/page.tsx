@@ -13,6 +13,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-tiger-blue via-tiger-purple to-tiger-pink">
+      <div id="clerk-captcha" />
       {/* Fixed Navigation Header */}
       <div className="fixed top-4 left-1/2 transform -translate-x-1/2 max-w-6xl w-11/12 px-4 py-2 bg-white rounded-2xl shadow-md z-50">
         <nav className="flex justify-between sm:grid sm:grid-cols-3">
@@ -94,6 +95,7 @@ export default async function Home() {
                   <GoogleSignInButton 
                     variant="cta" 
                     text="🔑 Sign Up with Google"
+                    mode="signup"
                   />
             </div>
           </SignedOut>
